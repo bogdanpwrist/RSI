@@ -1,0 +1,8 @@
+.github
+.vscode
+consumer-service/target
+grpc-service/target
+email-proto/target
+*.log
+*.class
+rest-api/target

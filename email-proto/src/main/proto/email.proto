@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.example.email.proto";
+option java_outer_classname = "EmailProto";
+
+service EmailService {
+  rpc SendEmail (SendEmailRequest) returns (SendEmailReply);
+}
+
+message SendEmailRequest {
+  string address = 1;
+  string body = 2;
+}
+
+message SendEmailReply {
+  string status = 1;
+  string details = 2;
+}

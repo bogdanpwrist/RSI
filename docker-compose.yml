@@ -1,0 +1,126 @@
+﻿version: '3.8'
+
+services:
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    networks:
+      - email-network
+
+  rest-api:
+    build:
+      context: .
+      dockerfile: rest-api/Dockerfile
+    ports:
+      - "7000:7000"
+    environment:
+      - REST_PORT=7000
+      - GRPC_TARGET=grpc-service:50051
+    depends_on:
+      - grpc-service
+    networks:
+      - email-network
+
+  grpc-service:
+    build:
+      context: .
+      dockerfile: grpc-service/Dockerfile
+    ports:
+      - "50051:50051"
+    environment:
+      - GRPC_PORT=50051
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - email-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    networks:
+      - email-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gmail-consumer:
+    build:
+      context: .
+      dockerfile: consumer-service/Dockerfile
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
+      - STORAGE_DIR=/data/storage
+      - CONSUMER_NAME=gmail-consumer
+      - DOMAIN_FILTER=gmail.com
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - email-network
+
+  wp-consumer:
+    build:
+      context: .
+      dockerfile: consumer-service/Dockerfile
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
+      - STORAGE_DIR=/data/storage
+      - CONSUMER_NAME=wp-consumer
+      - DOMAIN_FILTER=wp.com
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - email-network
+
+  other-consumer:
+    build:
+      context: .
+      dockerfile: consumer-service/Dockerfile
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
+      - STORAGE_DIR=/data/storage
+      - CONSUMER_NAME=other-consumer
+      - DOMAIN_FILTER=*
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - email-network
+
+networks:
+  email-network:
+    driver: bridge
+
+volumes:
+  storage:
