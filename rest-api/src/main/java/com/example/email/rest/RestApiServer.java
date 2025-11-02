@@ -4,7 +4,6 @@ import com.example.email.proto.SendEmailReply;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import io.javalin.Javalin;
-import io.javalin.http.staticfiles.Location;
 
 import java.util.Map;
 import java.util.logging.Level;
@@ -23,10 +22,6 @@ public final class RestApiServer {
         GrpcEmailClient grpcClient = new GrpcEmailClient(grpcTarget);
 
         Javalin app = Javalin.create(config -> {
-                config.staticFiles.add(staticConfig -> {
-                    staticConfig.directory = "/public";
-                    staticConfig.location = Location.CLASSPATH;
-                });
                 config.plugins.enableCors(cors -> {
                     cors.add(it -> it.anyHost());
                 });
