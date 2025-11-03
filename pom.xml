@@ -17,23 +17,15 @@
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <grpc.version>1.62.2</grpc.version>
-        <protobuf.version>3.25.3</protobuf.version>
-        <javalin.version>5.6.3</javalin.version>
-        <gson.version>2.11.0</gson.version>
-        <slf4j.version>2.0.12</slf4j.version>
-        <rabbitmq.version>5.20.0</rabbitmq.version>
-        <exec.plugin.version>3.2.0</exec.plugin.version>
-        <shade.plugin.version>3.5.3</shade.plugin.version>
+        <protobuf.maven.plugin.version>0.6.1</protobuf.maven.plugin.version>
+        <grpc.version>1.52.1</grpc.version>
+        <protobuf.version>3.22.2</protobuf.version>
+        <os.maven.plugin.version>1.7.1</os.maven.plugin.version>
+        <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-netty</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
             <dependency>
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-protobuf</artifactId>
@@ -45,29 +37,20 @@
                 <version>${grpc.version}</version>
             </dependency>
             <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-netty</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
                 <version>${protobuf.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.javalin</groupId>
-                <artifactId>javalin</artifactId>
-                <version>${javalin.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.code.gson</groupId>
-                <artifactId>gson</artifactId>
-                <version>${gson.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-services</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.slf4j</groupId>
-                <artifactId>slf4j-simple</artifactId>
-                <version>${slf4j.version}</version>
+                <groupId>org.apache.tomcat</groupId>
+                <artifactId>annotations-api</artifactId>
+                <version>${tomcat.annotations.api.version}</version>
+                <scope>provided</scope>
             </dependency>
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
@@ -80,9 +63,9 @@
                 <version>2.18.1</version>
             </dependency>
             <dependency>
-                <groupId>com.rabbitmq</groupId>
-                <artifactId>amqp-client</artifactId>
-                <version>${rabbitmq.version}</version>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-simple</artifactId>
+                <version>2.0.12</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

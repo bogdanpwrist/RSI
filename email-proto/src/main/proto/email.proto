@@ -4,8 +4,9 @@ option java_multiple_files = true;
 option java_package = "com.example.email.proto";
 option java_outer_classname = "EmailProto";
 
+// Email encryption service
 service EmailService {
-  rpc SendEmail (SendEmailRequest) returns (SendEmailReply);
+  rpc SendEmail (SendEmailRequest) returns (SendEmailReply) {}
 }
 
 message SendEmailRequest {

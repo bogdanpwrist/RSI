@@ -7,7 +7,7 @@ RUN mvn -pl grpc-service -am -DskipTests package
 # Runtime stage
 FROM eclipse-temurin:17-jre
 WORKDIR /app
-COPY --from=build /app/grpc-service/target/grpc-service-1.0-SNAPSHOT.jar app.jar
+COPY --from=build /app/grpc-service/target/grpc-service-1.0-SNAPSHOT-jar-with-dependencies.jar app.jar
 ENV GRPC_PORT=50051
 ENV STORAGE_DIR=/data/storage
 VOLUME /data/storage

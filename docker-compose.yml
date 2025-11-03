@@ -17,10 +17,17 @@ services:
     ports:
       - "7000:7000"
     environment:
-      - REST_PORT=7000
-      - GRPC_TARGET=grpc-service:50051
+      - SERVER_PORT=7000
+      - GRPC_TARGET=grpc-service:50001
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
     depends_on:
-      - grpc-service
+      grpc-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
     networks:
       - email-network
 
@@ -29,9 +36,9 @@ services:
       context: .
       dockerfile: grpc-service/Dockerfile
     ports:
-      - "50051:50051"
+      - "50051:50001"
     environment:
-      - GRPC_PORT=50051
+      - GRPC_PORT=50001
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=guest

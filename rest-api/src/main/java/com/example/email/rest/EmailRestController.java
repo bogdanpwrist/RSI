@@ -20,6 +20,9 @@ public class EmailRestController {
     @Autowired
     private GrpcEmailClient grpcClient;
     
+    @Autowired
+    private RabbitMQPublisher rabbitPublisher;
+    
     @PostMapping("/email")
     public ResponseEntity<Map<String, String>> sendEmail(@RequestBody EmailPayload payload) {
         try {
@@ -30,11 +33,26 @@ public class EmailRestController {
             }
             
             LOGGER.info(() -> "REST received email for " + payload.address());
+            
+            // Step 1: Send to gRPC for encryption
             SendEmailReply reply = grpcClient.send(payload);
+            
+            if ("SUCCESS".equals(reply.getStatus())) {
+
+                String encryptedBody = reply.getDetails();
+                if (encryptedBody.startsWith("Encrypted: ")) {
+                    encryptedBody = encryptedBody.substring("Encrypted: ".length());
+                }
+                
+                rabbitPublisher.publishEmail(payload.address(), encryptedBody);
+                
+                LOGGER.info("Email encrypted and published to RabbitMQ");
+            }
             
             return ResponseEntity.ok(Map.of(
                     "status", reply.getStatus(),
-                    "details", reply.getDetails()));
+                    "details", reply.getDetails(),
+                    "message", "Email encrypted and queued for storage"));
         } catch (Exception ex) {
             LOGGER.log(Level.SEVERE, "Failed to process request", ex);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
