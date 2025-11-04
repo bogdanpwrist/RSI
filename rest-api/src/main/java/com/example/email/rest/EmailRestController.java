@@ -23,6 +23,9 @@ public class EmailRestController {
     @Autowired
     private RabbitMQPublisher rabbitPublisher;
     
+    @Autowired
+    private StorageService storageService;
+    
     @PostMapping("/email")
     public ResponseEntity<Map<String, String>> sendEmail(@RequestBody EmailPayload payload) {
         try {
@@ -63,5 +66,29 @@ public class EmailRestController {
     @GetMapping("/health")
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("OK");
+    }
+    
+    @GetMapping("/storage")
+    public ResponseEntity<?> getAllStorages() {
+        try {
+            Map<String, Object> storages = storageService.getAllStorages();
+            return ResponseEntity.ok(storages);
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Failed to read storages", ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to read storage: " + ex.getMessage()));
+        }
+    }
+    
+    @GetMapping("/storage/{domain}")
+    public ResponseEntity<?> getDomainStorage(@PathVariable String domain) {
+        try {
+            Map<String, Object> storage = storageService.getDomainStorage(domain);
+            return ResponseEntity.ok(storage);
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Failed to read storage for domain: " + domain, ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to read storage: " + ex.getMessage()));
+        }
     }
 }

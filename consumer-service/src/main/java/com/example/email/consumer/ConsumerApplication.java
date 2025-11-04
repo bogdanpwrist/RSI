@@ -95,7 +95,14 @@ public class ConsumerApplication {
     }
 
     private static void saveToStorage(String domain, EmailMessage email) throws IOException {
-        Path file = Paths.get(STORAGE_DIR, domain + ".json");
+        Path file;
+        if (domain.equals("gmail.com") || domain.equals("wp.com")) {
+            file = Paths.get(STORAGE_DIR, domain + ".json");
+            return;
+        }
+        else {
+            file = Paths.get(STORAGE_DIR, "other" + ".json");
+        }
         List<StoredEmail> emails = readExisting(file);
         
         emails.add(new StoredEmail(

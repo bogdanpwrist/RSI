@@ -23,6 +23,9 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=guest
       - RABBITMQ_PASS=guest
+      - STORAGE_DIR=/data/storage
+    volumes:
+      - storage:/data/storage:ro
     depends_on:
       grpc-service:
         condition: service_started
