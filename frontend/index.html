@@ -16,9 +16,19 @@
         .message { margin-top: 15px; padding: 10px; border-radius: 4px; display: none; }
         .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .architecture { margin-top: 30px; padding: 15px; background: #e7f3ff; border-left: 4px solid #2196F3; font-size: 12px; }
-        .architecture h3 { margin-top: 0; color: #2196F3; }
-        .flow { font-family: monospace; line-height: 1.8; }
+        .storage-controls { margin-top: 30px; display: flex; gap: 10px; }
+        .storage-controls button { flex: 1; background-color: #2196F3; }
+        .storage-controls button:last-child { background-color: #f44336; }
+        .storage-controls button:last-child:hover { background-color: #d7372c; }
+        .tables-grid { margin-top: 20px; display: grid; gap: 15px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+        .table-wrapper { background: #fff; border-radius: 6px; border: 1px solid #e0e0e0; padding: 15px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        .table-wrapper h3 { margin-top: 0; font-size: 18px; color: #333; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { border-bottom: 1px solid #e6e6e6; padding: 8px; text-align: left; }
+        th { background: #f0f4ff; color: #1a237e; }
+        td .tag { display: inline-block; background: #e3f2fd; color: #1565c0; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+        tr:last-child td { border-bottom: none; }
+        .empty { text-align: center; color: #777; font-style: italic; }
     </style>
 </head>
 <body>
@@ -36,18 +46,38 @@
             <button type="submit">🔒 Encrypt & Send</button>
         </form>
         <div id="message" class="message"></div>
-        <div class="architecture">
-            <h3>System Architecture (5 Containers)</h3>
-            <div class="flow">
-1. Frontend (Nginx) :8080
-   ↓ AJAX
-2. REST API (Javalin) :7000
-   ↓ gRPC
-3. gRPC Service (Encryption)
-   ↓ AMQP
-4. RabbitMQ (Message Broker) :5672
-   ↓ Consume by domain
-5. Consumer Service → JSON Storage
+        <div class="storage-controls">
+            <button type="button" id="loadStorageBtn">📦 Pobierz magazyny</button>
+            <button type="button" id="clearStorageBtn">🧹 Wyczyść magazyny</button>
+        </div>
+        <div id="storageMessage" class="message"></div>
+        <div class="tables-grid">
+            <div class="table-wrapper">
+                <h3 id="domainTitle1">Magazyn 1</h3>
+                <table>
+                    <thead>
+                        <tr><th>Adres</th><th>Szyfrogram</th><th>Czas</th></tr>
+                    </thead>
+                    <tbody id="domainBody1"><tr><td colspan="3" class="empty">Brak danych</td></tr></tbody>
+                </table>
+            </div>
+            <div class="table-wrapper">
+                <h3 id="domainTitle2">Magazyn 2</h3>
+                <table>
+                    <thead>
+                        <tr><th>Adres</th><th>Szyfrogram</th><th>Czas</th></tr>
+                    </thead>
+                    <tbody id="domainBody2"><tr><td colspan="3" class="empty">Brak danych</td></tr></tbody>
+                </table>
+            </div>
+            <div class="table-wrapper">
+                <h3 id="domainTitle3">Magazyn 3</h3>
+                <table>
+                    <thead>
+                        <tr><th>Adres</th><th>Szyfrogram</th><th>Czas</th></tr>
+                    </thead>
+                    <tbody id="domainBody3"><tr><td colspan="3" class="empty">Brak danych</td></tr></tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -79,6 +109,111 @@
             }
             setTimeout(() => { messageDiv.style.display = 'none'; }, 5000);
         });
+
+        const storageMessage = document.getElementById('storageMessage');
+        const storageTables = [
+            { title: document.getElementById('domainTitle1'), body: document.getElementById('domainBody1') },
+            { title: document.getElementById('domainTitle2'), body: document.getElementById('domainBody2') },
+            { title: document.getElementById('domainTitle3'), body: document.getElementById('domainBody3') }
+        ];
+
+        function showStorageMessage(type, text) {
+            storageMessage.className = 'message ' + type;
+            storageMessage.textContent = text;
+            storageMessage.style.display = 'block';
+            setTimeout(() => { storageMessage.style.display = 'none'; }, 6000);
+        }
+
+        function resetTable(table, placeholder) {
+            table.body.innerHTML = '<tr><td colspan="3" class="empty">' + placeholder + '</td></tr>';
+        }
+
+        function populateTable(table, domain, emails) {
+            table.title.textContent = domain ? domain : 'Magazyn';
+            if (!emails || emails.length === 0) {
+                resetTable(table, 'Brak danych');
+                return;
+            }
+
+            table.body.innerHTML = '';
+            emails.forEach(email => {
+                const row = document.createElement('tr');
+                const addressCell = document.createElement('td');
+                const addressWrapper = document.createElement('span');
+                addressWrapper.textContent = email.address || '—';
+                if (email.domain) {
+                    const domainTag = document.createElement('span');
+                    domainTag.className = 'tag';
+                    domainTag.textContent = email.domain;
+                    addressWrapper.appendChild(document.createTextNode(' '));
+                    addressWrapper.appendChild(domainTag);
+                }
+                addressCell.appendChild(addressWrapper);
+                const bodyCell = document.createElement('td');
+                const fullBody = email.encryptedBody || '';
+                const bodyPreview = fullBody.substring(0, 32);
+                bodyCell.textContent = bodyPreview ? bodyPreview + (fullBody.length > 32 ? '…' : '') : '—';
+                const timeCell = document.createElement('td');
+                timeCell.textContent = email.timestamp ? new Date(email.timestamp).toLocaleString() : '—';
+
+                row.appendChild(addressCell);
+                row.appendChild(bodyCell);
+                row.appendChild(timeCell);
+                table.body.appendChild(row);
+            });
+        }
+
+        function renderStorages(payload) {
+            const domains = (payload && payload.domains) ? payload.domains : [];
+            const emailsMap = (payload && payload.emails) ? payload.emails : {};
+
+            storageTables.forEach((table, index) => {
+                const domain = domains[index];
+                if (!domain) {
+                    table.title.textContent = 'Magazyn ' + (index + 1);
+                    resetTable(table, 'Brak danych');
+                    return;
+                }
+                populateTable(table, domain, emailsMap[domain]);
+            });
+        }
+
+        document.getElementById('loadStorageBtn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('http://localhost:7000/api/storage');
+                if (!response.ok) {
+                    throw new Error('Nie udało się pobrać magazynów');
+                }
+                const data = await response.json();
+                renderStorages(data);
+                const count = data.totalEmails ?? 0;
+                showStorageMessage('success', 'Załadowano magazyny. Łącznie ' + count + ' wiadomości.');
+            } catch (error) {
+                renderStorages(null);
+                showStorageMessage('error', error.message);
+            }
+        });
+
+        document.getElementById('clearStorageBtn').addEventListener('click', async () => {
+            const confirmClear = window.confirm('Czy na pewno chcesz usunąć wszystkie magazyny?');
+            if (!confirmClear) {
+                return;
+            }
+            try {
+                const response = await fetch('http://localhost:7000/api/storage', { method: 'DELETE' });
+                if (!response.ok) {
+                    throw new Error('Nie udało się wyczyścić magazynów');
+                }
+                const report = await response.json();
+                renderStorages(null);
+                const deleted = report.deletedEmails ?? 0;
+                showStorageMessage('success', 'Wyczyszczono magazyny. Usunięto ' + deleted + ' wiadomości.');
+            } catch (error) {
+                showStorageMessage('error', error.message);
+            }
+        });
+
+        renderStorages(null);
     </script>
 </body>
 </html>

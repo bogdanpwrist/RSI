@@ -1,6 +1,8 @@
 package com.example.email.rest;
 
 import com.example.email.proto.SendEmailReply;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +16,7 @@ import java.util.logging.Logger;
 @RestController
 @RequestMapping("/api")
 @CrossOrigin(origins = "*")
+@Tag(name = "Email")
 public class EmailRestController {
     
     private static final Logger LOGGER = Logger.getLogger(EmailRestController.class.getName());
@@ -28,6 +31,7 @@ public class EmailRestController {
     private StorageService storageService;
     
     @PostMapping("/email")
+    @Operation(summary = "Accept email payload and trigger async encryption workflow")
     public ResponseEntity<Map<String, String>> sendEmail(@RequestBody EmailPayload payload) {
         if (payload == null || !payload.isValid()) {
             LOGGER.warning("Received invalid payload");
@@ -47,11 +51,9 @@ public class EmailRestController {
                         encryptedBody = encryptedBody.substring("Encrypted: ".length());
                     }
 
-                    // Publikuj w RabbitMQ po pomyślnym zaszyfrowaniu
                     rabbitPublisher.publishEmail(payload.address(), encryptedBody);
                     LOGGER.info("Async task completed: Email for " + payload.address() + " encrypted and published to RabbitMQ.");
                 } catch (Exception e) {
-                    // Logujemy błąd, który wystąpił podczas publikacji w RabbitMQ
                     LOGGER.log(Level.SEVERE, "Failed to publish to RabbitMQ in async chain for " + payload.address(), e);
                 }
             } else {
@@ -67,11 +69,13 @@ public class EmailRestController {
     }
     
     @GetMapping("/health")
+    @Operation(summary = "Health check for Kubernetes/containers")
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("OK");
     }
     
     @GetMapping("/storage")
+    @Operation(summary = "Fetch every stored email grouped by domain")
     public ResponseEntity<?> getAllStorages() {
         try {
             Map<String, Object> storages = storageService.getAllStorages();
@@ -84,6 +88,7 @@ public class EmailRestController {
     }
     
     @GetMapping("/storage/{domain}")
+    @Operation(summary = "Return stored emails for a specific domain")
     public ResponseEntity<?> getDomainStorage(@PathVariable String domain) {
         try {
             Map<String, Object> storage = storageService.getDomainStorage(domain);
@@ -92,6 +97,19 @@ public class EmailRestController {
             LOGGER.log(Level.SEVERE, "Failed to read storage for domain: " + domain, ex);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Failed to read storage: " + ex.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/storage")
+    @Operation(summary = "Remove all stored emails produced by RabbitMQ consumers")
+    public ResponseEntity<?> clearStorages() {
+        try {
+            Map<String, Object> result = storageService.clearAllStorages();
+            return ResponseEntity.ok(result);
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Failed to clear storages", ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to clear storage: " + ex.getMessage()));
         }
     }
 }

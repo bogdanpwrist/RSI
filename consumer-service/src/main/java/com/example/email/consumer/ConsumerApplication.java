@@ -1,15 +1,22 @@
 package com.example.email.consumer;
 
-import com.rabbitmq.client.*;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.rabbitmq.client.*;
 
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.*;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.TimeoutException;
 
 public class ConsumerApplication {
@@ -18,22 +25,22 @@ public class ConsumerApplication {
             .enable(SerializationFeature.INDENT_OUTPUT)
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    private static final String STORAGE_DIR = System.getenv().getOrDefault("STORAGE_DIR", "/data/storage");
-
     public static void main(String[] args) throws IOException, TimeoutException {
-        String host = System.getenv().getOrDefault("RABBITMQ_HOST", "localhost");
-        int port = Integer.parseInt(System.getenv().getOrDefault("RABBITMQ_PORT", "5672"));
-        String user = System.getenv().getOrDefault("RABBITMQ_USER", "guest");
-        String pass = System.getenv().getOrDefault("RABBITMQ_PASS", "guest");
-        String consumerName = System.getenv().getOrDefault("CONSUMER_NAME", "consumer");
-        String domainFilter = System.getenv().getOrDefault("DOMAIN_FILTER", "*");
+        Map<String, String> env = System.getenv();
+
+        String host = env.getOrDefault("RABBITMQ_HOST", "localhost");
+        int port = Integer.parseInt(env.getOrDefault("RABBITMQ_PORT", "5672"));
+        String user = env.getOrDefault("RABBITMQ_USER", "guest");
+        String pass = env.getOrDefault("RABBITMQ_PASS", "guest");
+        String consumerName = env.getOrDefault("CONSUMER_NAME", "consumer");
+        String domainFilter = env.getOrDefault("DOMAIN_FILTER", "*");
+
+        DatabaseClient databaseClient = DatabaseClient.fromEnvironment(env, domainFilter);
 
         System.out.println(consumerName + " starting...");
-        System.out.println("Storage directory: " + STORAGE_DIR);
         System.out.println("Domain filter: " + domainFilter);
+        System.out.println("Database bucket: " + databaseClient.bucket());
         System.out.println("Connecting to RabbitMQ at " + host + ":" + port);
-
-        Files.createDirectories(Paths.get(STORAGE_DIR));
 
         ConnectionFactory factory = new ConnectionFactory();
         factory.setHost(host);
@@ -41,85 +48,65 @@ public class ConsumerApplication {
         factory.setUsername(user);
         factory.setPassword(pass);
 
-        Connection connection = factory.newConnection();
-        Channel channel = connection.createChannel();
+    com.rabbitmq.client.Connection mqConnection = factory.newConnection();
+    Channel channel = mqConnection.createChannel();
 
-        // Declare a topic exchange
-        channel.exchangeDeclare("emails", "topic", true);
+        channel.exchangeDeclare("emails", BuiltinExchangeType.TOPIC, true);
 
-        // Create queue with consumer name
         String queueName = channel.queueDeclare(consumerName + "-queue", true, false, false, null).getQueue();
-        
-        // Bind queue based on domain filter
+
         if ("*".equals(domainFilter)) {
-            // Other consumer: bind to all domains except gmail.com and wp.com
             channel.queueBind(queueName, "emails", "#");
             System.out.println("Bound to ALL domains (will filter out gmail.com and wp.com)");
         } else {
-            // Specific consumer: bind only to specific domain
             channel.queueBind(queueName, "emails", domainFilter);
             System.out.println("Bound to domain: " + domainFilter);
         }
 
         System.out.println(consumerName + " ready. Waiting for messages...");
 
-        String finalDomainFilter = domainFilter;
-        String finalConsumerName = consumerName;
-        
         DeliverCallback deliverCallback = (consumerTag, delivery) -> {
+            String routingKey = delivery.getEnvelope().getRoutingKey();
             try {
-                String message = new String(delivery.getBody(), "UTF-8");
-                String routingKey = delivery.getEnvelope().getRoutingKey(); // domain
-                
-                // Filter for "other" consumer - skip gmail.com and wp.com
-                if ("*".equals(finalDomainFilter)) {
-                    if ("gmail.com".equals(routingKey) || "wp.com".equals(routingKey)) {
-                        System.out.println("Skipping " + routingKey + " (handled by specific consumer)");
-                        return;
-                    }
+                if (skipDomain(domainFilter, routingKey)) {
+                    System.out.println("Skipping " + routingKey + " (handled by dedicated consumer)");
+                    return;
                 }
-                
-                System.out.println("[" + finalConsumerName + "] Received message for domain: " + routingKey);
-                EmailMessage email = MAPPER.readValue(message, EmailMessage.class);
-                saveToStorage(routingKey, email);
-                
-                System.out.println("[" + finalConsumerName + "] Saved to storage: " + routingKey + ".json");
-                
-            } catch (Exception e) {
-                System.err.println("[" + finalConsumerName + "] Error processing message: " + e.getMessage());
-                e.printStackTrace();
+
+                String payload = new String(delivery.getBody(), StandardCharsets.UTF_8);
+                EmailMessage email = MAPPER.readValue(payload, EmailMessage.class);
+
+                StoredEmail storedEmail = new StoredEmail(
+                        email.address,
+                        email.encryptedBody,
+                        routingKey,
+                        Instant.now()
+                );
+
+                databaseClient.save(storedEmail);
+
+                System.out.println("[" + consumerName + "] Persisted message for domain " + routingKey +
+                        " into " + databaseClient.bucket());
+            } catch (SQLException sqlException) {
+                System.err.println("[" + consumerName + "] Database error: " + sqlException.getMessage());
+                sqlException.printStackTrace(System.err);
+            } catch (InterruptedException interruptedException) {
+                Thread.currentThread().interrupt();
+                System.err.println("[" + consumerName + "] Interrupted while writing to database");
+            } catch (Exception exception) {
+                System.err.println("[" + consumerName + "] Error processing message: " + exception.getMessage());
+                exception.printStackTrace(System.err);
             }
         };
 
         channel.basicConsume(queueName, true, deliverCallback, consumerTag -> {});
     }
 
-    private static void saveToStorage(String domain, EmailMessage email) throws IOException {
-        Path file;
-        if (domain.equals("gmail.com") || domain.equals("wp.com")) {
-            file = Paths.get(STORAGE_DIR, domain + ".json");
-            return;
+    private static boolean skipDomain(String domainFilter, String routingKey) {
+        if (!"*".equals(domainFilter)) {
+            return false;
         }
-        else {
-            file = Paths.get(STORAGE_DIR, "other" + ".json");
-        }
-        List<StoredEmail> emails = readExisting(file);
-        
-        emails.add(new StoredEmail(
-            email.address,
-            email.encryptedBody,
-            Instant.now()
-        ));
-        
-        MAPPER.writeValue(file.toFile(), emails);
-    }
-
-    private static List<StoredEmail> readExisting(Path file) throws IOException {
-        if (!Files.exists(file)) return new ArrayList<>();
-        if (Files.size(file) == 0) return new ArrayList<>();
-        
-        StoredEmail[] array = MAPPER.readValue(file.toFile(), StoredEmail[].class);
-        return new ArrayList<>(Arrays.asList(array));
+        return Objects.equals("gmail.com", routingKey) || Objects.equals("wp.com", routingKey);
     }
 
     static class EmailMessage {
@@ -128,16 +115,147 @@ public class ConsumerApplication {
     }
 
     static class StoredEmail {
-        public String address;
-        public String encryptedBody;
-        public Instant timestamp;
+        public final String address;
+        public final String encryptedBody;
+        public final String domain;
+        public final Instant timestamp;
 
-        public StoredEmail() {}
-
-        public StoredEmail(String address, String encryptedBody, Instant timestamp) {
+        StoredEmail(String address, String encryptedBody, String domain, Instant timestamp) {
             this.address = address;
             this.encryptedBody = encryptedBody;
+            this.domain = domain;
             this.timestamp = timestamp;
+        }
+    }
+
+    @FunctionalInterface
+    interface SqlConsumer<T> {
+        void accept(T t) throws SQLException;
+    }
+
+    static final class DatabaseClient {
+        private static final int DEFAULT_MAX_RETRIES = 15;
+        private static final long DEFAULT_RETRY_DELAY_MS = 2000L;
+
+        private final String bucket;
+        private final String jdbcUrl;
+        private final String username;
+        private final String password;
+        private final int maxRetries;
+        private final long retryDelayMillis;
+    private final Object schemaLock = new Object();
+    private volatile boolean schemaEnsured = false;
+
+        private DatabaseClient(String bucket,
+                               String jdbcUrl,
+                               String username,
+                               String password,
+                               int maxRetries,
+                               long retryDelayMillis) {
+            this.bucket = bucket;
+            this.jdbcUrl = jdbcUrl;
+            this.username = username;
+            this.password = password;
+            this.maxRetries = maxRetries;
+            this.retryDelayMillis = retryDelayMillis;
+        }
+
+        static DatabaseClient fromEnvironment(Map<String, String> env, String domainFilter) {
+            String bucket = env.getOrDefault("STORAGE_BUCKET", domainFilter);
+            String explicitUrl = env.get("DB_URL");
+
+            String host = env.getOrDefault("DB_HOST", hostFromBucket(bucket));
+            String port = env.getOrDefault("DB_PORT", "5432");
+            String dbName = env.getOrDefault("DB_DATABASE", bucket.replace('.', '_'));
+            String user = env.getOrDefault("DB_USER", "email_user");
+            String password = env.getOrDefault("DB_PASS", "email_pass");
+            int retries = Integer.parseInt(env.getOrDefault("DB_CONNECT_RETRIES", String.valueOf(DEFAULT_MAX_RETRIES)));
+            long delay = Long.parseLong(env.getOrDefault("DB_CONNECT_DELAY_MS", String.valueOf(DEFAULT_RETRY_DELAY_MS)));
+
+            String jdbcUrl = Optional.ofNullable(explicitUrl)
+                    .filter(url -> !url.isBlank())
+                    .orElse("jdbc:postgresql://" + host + ":" + port + "/" + dbName);
+
+            return new DatabaseClient(bucket, jdbcUrl, user, password, retries, delay);
+        }
+
+        String bucket() {
+            return bucket;
+        }
+
+        void save(StoredEmail email) throws SQLException, InterruptedException {
+            executeWithRetry(connection -> {
+                ensureSchema(connection);
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "INSERT INTO emails(address, encrypted_body, domain, created_at) VALUES (?, ?, ?, ?)")) {
+                    statement.setString(1, email.address);
+                    statement.setString(2, email.encryptedBody);
+                    statement.setString(3, email.domain);
+                    statement.setTimestamp(4, Timestamp.from(email.timestamp));
+                    statement.executeUpdate();
+                }
+            });
+        }
+
+        private void executeWithRetry(SqlConsumer<Connection> operation) throws SQLException, InterruptedException {
+            SQLException lastException = null;
+            for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                try (Connection connection = openConnection()) {
+                    operation.accept(connection);
+                    return;
+                } catch (SQLException ex) {
+                    lastException = ex;
+                    System.err.println("[DatabaseClient] Attempt " + attempt + " failed: " + ex.getMessage());
+                    if (attempt < maxRetries) {
+                        Thread.sleep(retryDelayMillis);
+                    }
+                }
+            }
+            throw lastException != null ? lastException : new SQLException("Unknown database error");
+        }
+
+        private Connection openConnection() throws SQLException {
+            if (username == null || username.isBlank()) {
+                return java.sql.DriverManager.getConnection(jdbcUrl);
+            }
+            return java.sql.DriverManager.getConnection(jdbcUrl, username, password);
+        }
+
+        private void ensureSchema(Connection connection) throws SQLException {
+            if (schemaEnsured) {
+                return;
+            }
+            synchronized (schemaLock) {
+                if (schemaEnsured) {
+                    return;
+                }
+                try (Statement statement = connection.createStatement()) {
+                    statement.executeUpdate("""
+                        CREATE TABLE IF NOT EXISTS emails (
+                            id SERIAL PRIMARY KEY,
+                            address TEXT NOT NULL,
+                            encrypted_body TEXT NOT NULL,
+                            domain TEXT NOT NULL,
+                            created_at TIMESTAMPTZ NOT NULL
+                        )
+                        """);
+                    statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_emails_created_at ON emails(created_at DESC)");
+                    statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_emails_domain_created ON emails(domain, created_at DESC)");
+                    schemaEnsured = true;
+                } catch (SQLException ex) {
+                    schemaEnsured = false;
+                    throw ex;
+                }
+            }
+        }
+
+        private static String hostFromBucket(String bucket) {
+            return switch (bucket) {
+                case "gmail.com" -> "gmail-db";
+                case "wp.com" -> "wp-db";
+                case "other" -> "other-db";
+                default -> "localhost";
+            };
         }
     }
 }

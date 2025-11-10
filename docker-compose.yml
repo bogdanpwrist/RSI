@@ -23,13 +23,25 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=guest
       - RABBITMQ_PASS=guest
-      - STORAGE_DIR=/data/storage
-    volumes:
-      - storage:/data/storage:ro
+      - STORAGE_GMAIL_URL=jdbc:postgresql://gmail-db:5432/gmail_store
+      - STORAGE_GMAIL_USER=email_user
+      - STORAGE_GMAIL_PASSWORD=email_pass
+      - STORAGE_WP_URL=jdbc:postgresql://wp-db:5432/wp_store
+      - STORAGE_WP_USER=email_user
+      - STORAGE_WP_PASSWORD=email_pass
+      - STORAGE_OTHER_URL=jdbc:postgresql://other-db:5432/other_store
+      - STORAGE_OTHER_USER=email_user
+      - STORAGE_OTHER_PASSWORD=email_pass
     depends_on:
       grpc-service:
         condition: service_started
       rabbitmq:
+        condition: service_healthy
+      gmail-db:
+        condition: service_healthy
+      wp-db:
+        condition: service_healthy
+      other-db:
         condition: service_healthy
     networks:
       - email-network
@@ -77,13 +89,16 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=guest
       - RABBITMQ_PASS=guest
-      - STORAGE_DIR=/data/storage
       - CONSUMER_NAME=gmail-consumer
       - DOMAIN_FILTER=gmail.com
-    volumes:
-      - storage:/data/storage
+      - STORAGE_BUCKET=gmail.com
+      - DB_URL=jdbc:postgresql://gmail-db:5432/gmail_store
+      - DB_USER=email_user
+      - DB_PASS=email_pass
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      gmail-db:
         condition: service_healthy
     networks:
       - email-network
@@ -97,13 +112,16 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=guest
       - RABBITMQ_PASS=guest
-      - STORAGE_DIR=/data/storage
       - CONSUMER_NAME=wp-consumer
       - DOMAIN_FILTER=wp.com
-    volumes:
-      - storage:/data/storage
+      - STORAGE_BUCKET=wp.com
+      - DB_URL=jdbc:postgresql://wp-db:5432/wp_store
+      - DB_USER=email_user
+      - DB_PASS=email_pass
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      wp-db:
         condition: service_healthy
     networks:
       - email-network
@@ -117,14 +135,71 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=guest
       - RABBITMQ_PASS=guest
-      - STORAGE_DIR=/data/storage
       - CONSUMER_NAME=other-consumer
       - DOMAIN_FILTER=*
-    volumes:
-      - storage:/data/storage
+      - STORAGE_BUCKET=other
+      - DB_URL=jdbc:postgresql://other-db:5432/other_store
+      - DB_USER=email_user
+      - DB_PASS=email_pass
     depends_on:
       rabbitmq:
         condition: service_healthy
+      other-db:
+        condition: service_healthy
+    networks:
+      - email-network
+
+  gmail-db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=gmail_store
+      - POSTGRES_USER=email_user
+      - POSTGRES_PASSWORD=email_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - gmail-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U email_user -d gmail_store"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - email-network
+
+  wp-db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=wp_store
+      - POSTGRES_USER=email_user
+      - POSTGRES_PASSWORD=email_pass
+    ports:
+      - "5434:5432"
+    volumes:
+      - wp-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U email_user -d wp_store"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - email-network
+
+  other-db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=other_store
+      - POSTGRES_USER=email_user
+      - POSTGRES_PASSWORD=email_pass
+    ports:
+      - "5435:5432"
+    volumes:
+      - other-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U email_user -d other_store"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
       - email-network
 
@@ -133,4 +208,6 @@ networks:
     driver: bridge
 
 volumes:
-  storage:
+  gmail-db-data:
+  wp-db-data:
+  other-db-data:

@@ -5,7 +5,7 @@ Complete email encryption and storage pipeline built with Java, Spring Boot, gRP
 ## Architecture
 
 ```
-Frontend (AJAX) → REST API (Spring Boot) → gRPC Service (Encryption) → RabbitMQ → Consumer Services → JSON Storage
+Frontend (AJAX) → REST API (Spring Boot) → gRPC Service (Encryption) → RabbitMQ → Consumer Services → PostgreSQL Storage
 ```
 
 **Flow:**
@@ -14,7 +14,7 @@ Frontend (AJAX) → REST API (Spring Boot) → gRPC Service (Encryption) → Rab
 3. gRPC encrypts email body using Base64
 4. REST API publishes encrypted email to RabbitMQ
 5. Consumer services receive messages based on domain routing
-6. Consumers store encrypted emails in JSON files
+6. Consumers persist encrypted emails into dedicated PostgreSQL databases per domain (gmail.com, wp.com, other)
 
 ## Modules
 
@@ -23,7 +23,7 @@ Frontend (AJAX) → REST API (Spring Boot) → gRPC Service (Encryption) → Rab
 | `email-proto`     | gRPC protocol definitions and generated classes from `email.proto`. |
 | `grpc-service`    | gRPC server that encrypts email body using Base64 encoding. |
 | `rest-api`        | Spring Boot REST API that receives emails, calls gRPC for encryption, and publishes to RabbitMQ. |
-| `consumer-service`| RabbitMQ consumers that receive encrypted emails and store them in JSON files by domain. |
+| `consumer-service`| RabbitMQ consumers that receive encrypted emails and store them in per-domain PostgreSQL databases. |
 | `frontend`        | Simple HTML/JavaScript interface for sending emails. |
 
 ## Requirements
@@ -53,6 +53,7 @@ This starts:
 - **gRPC Service**: localhost:50051
 - **RabbitMQ**: localhost:5672 (Management UI: http://localhost:15672)
 - **Consumers**: gmail-consumer, wp-consumer, other-consumer
+- **Storage**: PostgreSQL containers exposed on ports 5433 (gmail), 5434 (wp), 5435 (other)
 
 ### Local Development
 
@@ -101,13 +102,19 @@ Run from Command Palette (`Ctrl+Shift+P` → `Tasks: Run Task`)
 - `rabbitmq.port` - RabbitMQ port (default: `5672`)
 - `rabbitmq.user` - RabbitMQ username (default: `guest`)
 - `rabbitmq.pass` - RabbitMQ password (default: `guest`)
+- `storage.gmail.url` / `storage.gmail.user` / `storage.gmail.password` - Connection info for Gmail Postgres store
+- `storage.wp.url` / `storage.wp.user` / `storage.wp.password` - Connection info for WP Postgres store
+- `storage.other.url` / `storage.other.user` / `storage.other.password` - Connection info for the "other" Postgres store
 
 ### Consumer Service Environment Variables
 - `RABBITMQ_HOST` - RabbitMQ host
 - `RABBITMQ_PORT` - RabbitMQ port
 - `CONSUMER_NAME` - Consumer identifier
 - `DOMAIN_FILTER` - Email domain to consume (`gmail.com`, `wp.com`, or `*` for others)
-- `STORAGE_DIR` - JSON storage directory (default: `/data/storage`)
+- `STORAGE_BUCKET` - Logical bucket for stored emails (`gmail.com`, `wp.com`, or `other`)
+- `DB_URL` - JDBC URL to the target PostgreSQL database
+- `DB_USER` / `DB_PASS` - Credentials for the database connection
+- `DB_CONNECT_RETRIES` / `DB_CONNECT_DELAY_MS` *(optional)* - Retry configuration for database bootstrapping
 
 ## Data Flow Example
 
@@ -133,16 +140,13 @@ Run from Command Palette (`Ctrl+Shift+P` → `Tasks: Run Task`)
    ```
    - Published to exchange `emails` with routing key `gmail.com`
 
-4. **Consumer Storage** (`storage/gmail.com.json`)
-   ```json
-   [
-     {
-       "address": "user@gmail.com",
-       "encryptedBody": "SGVsbG8gV29ybGQ=",
-       "timestamp": "2025-11-03T19:40:00Z"
-     }
-   ]
-   ```
+4. **Consumer Storage** (PostgreSQL `emails` table)
+```sql
+SELECT address, encrypted_body, domain, created_at
+FROM emails
+WHERE domain = 'gmail.com'
+ORDER BY created_at DESC;
+```
 
 ## Testing
 
@@ -157,15 +161,13 @@ Run from Command Palette (`Ctrl+Shift+P` → `Tasks: Run Task`)
 
 ## Storage
 
-JSON files are stored in `storage/<domain>.json`:
-- `storage/gmail.com.json` - All Gmail emails
-- `storage/wp.com.json` - All WP emails
-- `storage/yahoo.com.json` - Other domains
-
-Each entry contains:
+Each consumer writes to a dedicated PostgreSQL instance (gmail, wp, other). Every instance maintains an `emails` table with:
 - `address` - Email address
-- `encryptedBody` - Base64 encrypted content
-- `timestamp` - Storage time
+- `encrypted_body` - Base64 encrypted content
+- `domain` - Original routing domain
+- `created_at` - Storage timestamp
+
+Docker compose exposes the three databases on host ports 5433, 5434, and 5435 for direct inspection.
 
 ## Logging
 
