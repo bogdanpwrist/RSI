@@ -159,6 +159,98 @@ ORDER BY created_at DESC;
    - RabbitMQ receives message
    - Consumer stores to JSON
 
+## Service Management (HATEOAS)
+
+The REST API implements HATEOAS (Hypermedia as the Engine of Application State) for managing email services (Gmail, WP, Other). Each service can be in one of three states:
+
+- **ACTIVE** - Service is operational and accepting emails
+- **DISABLED** - Service is disabled, emails will be rejected
+- **MAINTENANCE** - Service is under maintenance, emails will be rejected
+
+### Service Status Endpoints
+
+**Get all services status:**
+```bash
+GET /api/services/status
+```
+Response:
+```json
+{
+  "gmail": "ACTIVE",
+  "wp": "ACTIVE",
+  "other": "DISABLED"
+}
+```
+
+**Get specific service with HATEOAS links:**
+```bash
+GET /api/services/{serviceName}
+```
+Example response for ACTIVE service:
+```json
+{
+  "name": "gmail",
+  "status": "ACTIVE",
+  "_links": {
+    "self": {
+      "href": "http://localhost:7000/api/services/gmail"
+    },
+    "disable": {
+      "href": "http://localhost:7000/api/services/gmail/disable"
+    },
+    "maintenance": {
+      "href": "http://localhost:7000/api/services/gmail/maintenance"
+    },
+    "list all": {
+      "href": "http://localhost:7000/api/services/status"
+    }
+  }
+}
+```
+
+### Service Control Endpoints
+
+**Activate a service:**
+```bash
+PATCH /api/services/{serviceName}/activate
+```
+- Only works for DISABLED or MAINTENANCE services
+- Returns 409 Conflict if already ACTIVE
+
+**Disable a service:**
+```bash
+PATCH /api/services/{serviceName}/disable
+```
+- Only works for ACTIVE or MAINTENANCE services
+- Returns 409 Conflict if already DISABLED
+
+**Set to maintenance mode:**
+```bash
+PATCH /api/services/{serviceName}/maintenance
+```
+- Only works for ACTIVE services
+- Returns 409 Conflict if not ACTIVE
+
+### Error Responses
+
+When trying to perform an invalid operation, the API returns HTTP 409 Conflict with RFC7807 problem detail:
+```json
+{
+  "type": "about:blank",
+  "title": "CONFLICT",
+  "status": 409,
+  "detail": "You CAN'T activate a service with status ACTIVE"
+}
+```
+
+### Frontend Service Controls
+
+The frontend includes three toggle switches for managing services:
+- Toggle each service on/off
+- Visual status indicators (Włączony/Wyłączony)
+- Real-time synchronization with backend
+- Error messages when service is unavailable
+
 ## Storage
 
 Each consumer writes to a dedicated PostgreSQL instance (gmail, wp, other). Every instance maintains an `emails` table with:

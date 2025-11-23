@@ -29,11 +29,57 @@
         td .tag { display: inline-block; background: #e3f2fd; color: #1565c0; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
         tr:last-child td { border-bottom: none; }
         .empty { text-align: center; color: #777; font-style: italic; }
+        .services-control { background: #f8f9fa; padding: 20px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #ddd; }
+        .services-control h3 { margin-top: 0; font-size: 16px; color: #333; }
+        .service-switch { display: flex; justify-content: space-between; align-items: center; margin: 12px 0; padding: 10px; background: white; border-radius: 4px; }
+        .service-switch label { font-weight: normal; color: #555; }
+        .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .3s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: #4CAF50; }
+        input:checked + .slider:before { transform: translateX(26px); }
+        .service-status { font-size: 12px; margin-left: 10px; padding: 2px 8px; border-radius: 4px; }
+        .status-enabled { background: #d4edda; color: #155724; }
+        .status-disabled { background: #f8d7da; color: #721c24; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📧 Email Encryption System</h1>
+        <div class="services-control">
+            <h3>⚙️ Zarządzanie serwisami</h3>
+            <div class="service-switch">
+                <label for="gmailSwitch">
+                    Gmail
+                    <span class="service-status status-enabled" id="gmailStatus">Włączony</span>
+                </label>
+                <label class="switch">
+                    <input type="checkbox" id="gmailSwitch" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="service-switch">
+                <label for="wpSwitch">
+                    WP
+                    <span class="service-status status-enabled" id="wpStatus">Włączony</span>
+                </label>
+                <label class="switch">
+                    <input type="checkbox" id="wpSwitch" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="service-switch">
+                <label for="otherSwitch">
+                    Inne serwisy
+                    <span class="service-status status-enabled" id="otherStatus">Włączony</span>
+                </label>
+                <label class="switch">
+                    <input type="checkbox" id="otherSwitch" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
         <form id="emailForm">
             <div class="form-group">
                 <label for="email">Email Address:</label>
@@ -82,6 +128,76 @@
         </div>
     </div>
     <script>
+        // Service toggle functionality
+        const services = ['gmail', 'wp', 'other'];
+        
+        async function updateServiceStatus(serviceName, enabled) {
+            try {
+                const action = enabled ? 'activate' : 'disable';
+                const response = await fetch(`http://localhost:7000/api/services/${serviceName}/${action}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to update service status');
+                }
+                
+                const result = await response.json();
+                const statusSpan = document.getElementById(serviceName + 'Status');
+                
+                if (result.status === 'ACTIVE') {
+                    statusSpan.textContent = 'Włączony';
+                    statusSpan.className = 'service-status status-enabled';
+                } else {
+                    statusSpan.textContent = 'Wyłączony';
+                    statusSpan.className = 'service-status status-disabled';
+                }
+            } catch (error) {
+                console.error('Error updating service status:', error);
+                alert('Błąd: ' + error.message);
+                // Revert the switch
+                document.getElementById(serviceName + 'Switch').checked = !enabled;
+            }
+        }
+        
+        async function loadServiceStatuses() {
+            try {
+                const response = await fetch('http://localhost:7000/api/services/status');
+                if (!response.ok) {
+                    throw new Error('Failed to load service statuses');
+                }
+                
+                const statuses = await response.json();
+                services.forEach(service => {
+                    const status = statuses[service];
+                    const enabled = (status === 'ACTIVE');
+                    document.getElementById(service + 'Switch').checked = enabled;
+                    const statusSpan = document.getElementById(service + 'Status');
+                    if (enabled) {
+                        statusSpan.textContent = 'Włączony';
+                        statusSpan.className = 'service-status status-enabled';
+                    } else {
+                        statusSpan.textContent = 'Wyłączony';
+                        statusSpan.className = 'service-status status-disabled';
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading service statuses:', error);
+            }
+        }
+        
+        // Add event listeners for switches
+        services.forEach(service => {
+            document.getElementById(service + 'Switch').addEventListener('change', function() {
+                updateServiceStatus(service, this.checked);
+            });
+        });
+        
+        // Load service statuses on page load
+        loadServiceStatuses();
+        
         document.getElementById('emailForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('email').value;
@@ -96,11 +212,12 @@
                 if (response.ok) {
                     const result = await response.json();
                     messageDiv.className = 'message success';
-                    messageDiv.textContent = '✓ ' + result.details;
+                    messageDiv.textContent = '✓ ' + result.message;
                     messageDiv.style.display = 'block';
                     document.getElementById('emailForm').reset();
                 } else {
-                    throw new Error('Failed to send');
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to send');
                 }
             } catch (error) {
                 messageDiv.className = 'message error';
