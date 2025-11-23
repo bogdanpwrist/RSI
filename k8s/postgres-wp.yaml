@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wp-db-pvc
+  namespace: email-pipeline
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wp-db
+  namespace: email-pipeline
+  labels:
+    app: wp-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wp-db
+  template:
+    metadata:
+      labels:
+        app: wp-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: "wp_store"
+        - name: POSTGRES_USER
+          value: "email_user"
+        - name: POSTGRES_PASSWORD
+          value: "email_pass"
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - email_user
+            - -d
+            - wp_store
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - email_user
+            - -d
+            - wp_store
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: wp-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wp-db
+  namespace: email-pipeline
+  labels:
+    app: wp-db
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+  selector:
+    app: wp-db

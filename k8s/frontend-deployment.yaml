@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: email-pipeline
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      initContainers:
+      - name: copy-frontend
+        image: busybox
+        command: ['sh', '-c', 'cp /source/* /target/ 2>/dev/null || true']
+        volumeMounts:
+        - name: frontend-source
+          mountPath: /source
+        - name: frontend-content
+          mountPath: /target
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: frontend-content
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: frontend-source
+        hostPath:
+          path: /run/desktop/mnt/host/c/Users/Bogdan/RSI/frontend
+          type: Directory
+      - name: frontend-content
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: email-pipeline
+  labels:
+    app: frontend
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30800
+    protocol: TCP
+  selector:
+    app: frontend

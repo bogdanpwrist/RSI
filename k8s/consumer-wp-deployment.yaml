@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wp-consumer
+  namespace: email-pipeline
+  labels:
+    app: wp-consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wp-consumer
+  template:
+    metadata:
+      labels:
+        app: wp-consumer
+    spec:
+      containers:
+      - name: consumer
+        image: consumer-service:latest
+        imagePullPolicy: Never
+        env:
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASS
+          value: "guest"
+        - name: CONSUMER_NAME
+          value: "wp-consumer"
+        - name: DOMAIN_FILTER
+          value: "wp.com"
+        - name: STORAGE_BUCKET
+          value: "wp.com"
+        - name: DB_URL
+          value: "jdbc:postgresql://wp-db:5432/wp_store"
+        - name: DB_USER
+          value: "email_user"
+        - name: DB_PASS
+          value: "email_pass"

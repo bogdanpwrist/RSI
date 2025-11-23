@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gmail-consumer
+  namespace: email-pipeline
+  labels:
+    app: gmail-consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gmail-consumer
+  template:
+    metadata:
+      labels:
+        app: gmail-consumer
+    spec:
+      containers:
+      - name: consumer
+        image: consumer-service:latest
+        imagePullPolicy: Never
+        env:
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASS
+          value: "guest"
+        - name: CONSUMER_NAME
+          value: "gmail-consumer"
+        - name: DOMAIN_FILTER
+          value: "gmail.com"
+        - name: STORAGE_BUCKET
+          value: "gmail.com"
+        - name: DB_URL
+          value: "jdbc:postgresql://gmail-db:5432/gmail_store"
+        - name: DB_USER
+          value: "email_user"
+        - name: DB_PASS
+          value: "email_pass"

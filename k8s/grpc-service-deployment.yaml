@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpc-service
+  namespace: email-pipeline
+  labels:
+    app: grpc-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpc-service
+  template:
+    metadata:
+      labels:
+        app: grpc-service
+    spec:
+      containers:
+      - name: grpc-service
+        image: grpc-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 50001
+          name: grpc
+        env:
+        - name: GRPC_PORT
+          value: "50001"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASS
+          value: "guest"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grpc-service
+  namespace: email-pipeline
+  labels:
+    app: grpc-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 50001
+    targetPort: 50001
+    protocol: TCP
+    name: grpc
+  selector:
+    app: grpc-service

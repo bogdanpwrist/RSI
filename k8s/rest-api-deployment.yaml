@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rest-api
+  namespace: email-pipeline
+  labels:
+    app: rest-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rest-api
+  template:
+    metadata:
+      labels:
+        app: rest-api
+    spec:
+      containers:
+      - name: rest-api
+        image: rest-api:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 7000
+          name: http
+        env:
+        - name: SERVER_PORT
+          value: "7000"
+        - name: GRPC_TARGET
+          value: "grpc-service:50001"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: RABBITMQ_USER
+          value: "guest"
+        - name: RABBITMQ_PASS
+          value: "guest"
+        - name: STORAGE_GMAIL_URL
+          value: "jdbc:postgresql://gmail-db:5432/gmail_store"
+        - name: STORAGE_GMAIL_USER
+          value: "email_user"
+        - name: STORAGE_GMAIL_PASSWORD
+          value: "email_pass"
+        - name: STORAGE_WP_URL
+          value: "jdbc:postgresql://wp-db:5432/wp_store"
+        - name: STORAGE_WP_USER
+          value: "email_user"
+        - name: STORAGE_WP_PASSWORD
+          value: "email_pass"
+        - name: STORAGE_OTHER_URL
+          value: "jdbc:postgresql://other-db:5432/other_store"
+        - name: STORAGE_OTHER_USER
+          value: "email_user"
+        - name: STORAGE_OTHER_PASSWORD
+          value: "email_pass"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rest-api
+  namespace: email-pipeline
+  labels:
+    app: rest-api
+spec:
+  type: NodePort
+  ports:
+  - port: 7000
+    targetPort: 7000
+    nodePort: 30700
+    protocol: TCP
+    name: http
+  selector:
+    app: rest-api

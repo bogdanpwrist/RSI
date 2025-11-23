@@ -134,7 +134,7 @@
         async function updateServiceStatus(serviceName, enabled) {
             try {
                 const action = enabled ? 'activate' : 'disable';
-                const response = await fetch(`http://localhost:7000/api/services/${serviceName}/${action}`, {
+                    const response = await fetch(`http://localhost:30700/api/services/${serviceName}/${action}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' }
                 });
@@ -164,7 +164,7 @@
         
         async function loadServiceStatuses() {
             try {
-                const response = await fetch('http://localhost:7000/api/services/status');
+                const response = await fetch('http://localhost:30700/api/services/status');
                 if (!response.ok) {
                     throw new Error('Failed to load service statuses');
                 }
@@ -204,7 +204,7 @@
             const content = document.getElementById('content').value;
             const messageDiv = document.getElementById('message');
             try {
-                const response = await fetch('http://localhost:7000/api/email', {
+                const response = await fetch('http://localhost:30700/api/email', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ address: email, body: content })
@@ -297,7 +297,7 @@
 
         document.getElementById('loadStorageBtn').addEventListener('click', async () => {
             try {
-                const response = await fetch('http://localhost:7000/api/storage');
+                const response = await fetch('http://localhost:30700/api/storage');
                 if (!response.ok) {
                     throw new Error('Nie udało się pobrać magazynów');
                 }
@@ -317,7 +317,7 @@
                 return;
             }
             try {
-                const response = await fetch('http://localhost:7000/api/storage', { method: 'DELETE' });
+                const response = await fetch('http://localhost:30700/api/storage', { method: 'DELETE' });
                 if (!response.ok) {
                     throw new Error('Nie udało się wyczyścić magazynów');
                 }

@@ -41,7 +41,59 @@ mvn clean package
 
 ## Running
 
-### Full Stack with Docker Compose (Recommended)
+### Kubernetes Deployment (Recommended)
+
+**Prerequisites:**
+- Docker Desktop with Kubernetes enabled
+- kubectl installed and configured
+
+**Deploy to Kubernetes:**
+```powershell
+.\k8s\deploy.ps1
+```
+
+Or manually:
+```powershell
+# Build images
+docker build -t grpc-service:latest -f grpc-service/Dockerfile .
+docker build -t rest-api:latest -f rest-api/Dockerfile .
+docker build -t consumer-service:latest -f consumer-service/Dockerfile .
+
+# Apply Kubernetes configurations
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/postgres-gmail.yaml
+kubectl apply -f k8s/postgres-wp.yaml
+kubectl apply -f k8s/postgres-other.yaml
+kubectl apply -f k8s/rabbitmq-deployment.yaml
+kubectl apply -f k8s/grpc-service-deployment.yaml
+kubectl apply -f k8s/rest-api-deployment.yaml
+kubectl apply -f k8s/consumer-gmail-deployment.yaml
+kubectl apply -f k8s/consumer-wp-deployment.yaml
+kubectl apply -f k8s/consumer-other-deployment.yaml
+kubectl apply -f k8s/frontend-deployment.yaml
+```
+
+**Access Points:**
+- **Frontend**: http://localhost:30800
+- **REST API**: http://localhost:30700
+- **RabbitMQ Management**: http://localhost:30672 (guest/guest)
+
+**Useful Commands:**
+```powershell
+# Check pod status
+kubectl get pods -n email-pipeline
+
+# View logs
+kubectl logs -n email-pipeline <pod-name>
+
+# Get all services
+kubectl get svc -n email-pipeline
+
+# Delete deployment
+.\k8s\cleanup.ps1
+```
+
+### Full Stack with Docker Compose
 
 ```bash
 docker compose up --build
